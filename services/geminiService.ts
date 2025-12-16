@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { UserData, WorkoutPlan, Exercise, Location } from '../types';
+import { UserData, WorkoutPlan, Exercise } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -35,11 +35,44 @@ const workoutPlanSchema: Schema = {
   items: dayPlanSchema,
 };
 
+// Helper function to add timeout to promises
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Tempo limite excedido. Tente novamente.')), timeoutMs)
+    ),
+  ]);
+};
+
+// Helper function to retry failed requests
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 2,
+  delayMs: number = 1000
+): Promise<T> => {
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      console.log(`Tentativa ${attempt + 1} falhou. Tentando novamente...`);
+
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, delayMs * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError;
+};
+
 export const generateWorkoutPlan = async (userData: UserData): Promise<WorkoutPlan> => {
   const prompt = `
     Atue como um Personal Trainer brasileiro experiente. Crie um plano de treino semanal personalizado em PORTUGUÊS DO BRASIL.
     Dados do usuário:
-    - Gênero: ${userData.gender}
     - Peso: ${userData.weight}kg, Altura: ${userData.height}cm
     - Objetivo: ${userData.goal}
     - Nível de Experiência: ${userData.experience}
@@ -58,22 +91,28 @@ export const generateWorkoutPlan = async (userData: UserData): Promise<WorkoutPl
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: workoutPlanSchema,
-      },
-    });
+    const result = await withRetry(async () => {
+      return await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: workoutPlanSchema,
+          },
+        }),
+        30000 // 30 seconds timeout
+      );
+    }, 2, 2000); // 2 retries with 2 second delay
 
-    const text = response.text;
+    const text = result.text;
     if (!text) throw new Error("Sem resposta da IA");
-    
+
     return JSON.parse(text) as WorkoutPlan;
   } catch (error) {
     console.error("Erro ao gerar treino:", error);
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+    throw new Error(`Falha ao gerar treino: ${errorMessage}. Verifique sua conexão e tente novamente.`);
   }
 };
 
@@ -91,16 +130,21 @@ export const getAlternativeExercises = async (originalExercise: string, muscle: 
   };
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: alternativeSchema,
-      },
-    });
+    const result = await withRetry(async () => {
+      return await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: alternativeSchema,
+          },
+        }),
+        20000 // 20 seconds timeout
+      );
+    }, 1, 1000); // 1 retry with 1 second delay
 
-    const text = response.text;
+    const text = result.text;
     if (!text) throw new Error("Sem resposta da IA");
 
     return JSON.parse(text) as Exercise[];
