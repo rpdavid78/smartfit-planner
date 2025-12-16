@@ -1,0 +1,5 @@
+{
+  "name": "SmartFit Planner",
+  "description": "An AI-powered personal trainer app that generates personalized weekly workout routines based on your goals, experience, and available equipment.",
+  "requestFramePermissions": []
+}
