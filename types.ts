@@ -18,6 +18,7 @@ export enum Location {
 }
 
 export interface UserData {
+  gender: 'Masculino' | 'Feminino';
   weight: number; // kg
   height: number; // cm
   goal: Goal;

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { UserData, WorkoutPlan, Exercise } from '../types';
+import { UserData, WorkoutPlan, Exercise, Location } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -39,6 +39,7 @@ export const generateWorkoutPlan = async (userData: UserData): Promise<WorkoutPl
   const prompt = `
     Atue como um Personal Trainer brasileiro experiente. Crie um plano de treino semanal personalizado em PORTUGUÊS DO BRASIL.
     Dados do usuário:
+    - Gênero: ${userData.gender}
     - Peso: ${userData.weight}kg, Altura: ${userData.height}cm
     - Objetivo: ${userData.goal}
     - Nível de Experiência: ${userData.experience}

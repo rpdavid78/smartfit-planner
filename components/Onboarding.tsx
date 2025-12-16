@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserData, Goal, ExperienceLevel, Location } from '../types';
-import { ChevronRight, ChevronLeft, Check, Target, Activity, MapPin, User, Share2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, Target, Activity, MapPin, User, Share2, Download, Copy, X, HelpCircle, Smartphone } from 'lucide-react';
 
 interface OnboardingProps {
   onComplete: (data: UserData) => void;
+  installPrompt: any;
 }
 
 const MUSCLE_GROUPS = [
@@ -14,15 +15,36 @@ const DAYS_OF_WEEK = [
   'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'
 ];
 
-const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
+const Onboarding: React.FC<OnboardingProps> = ({ onComplete, installPrompt }) => {
   const [step, setStep] = useState(1);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState('');
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  // Initial state updated to include a default goal to prevent "Next" button lock
   const [formData, setFormData] = useState<Partial<UserData>>({
+    gender: 'Masculino',
     weight: 70,
     height: 175,
+    goal: Goal.HYPERTROPHY, // Default goal set to allow proceeding immediately
     duration: 60,
     targetMuscles: [],
     days: [],
+    location: Location.GYM, // Default location set to prevent validation lock
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCurrentUrl(window.location.href);
+      // Detecta se é iOS
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      setIsIOS(/iphone|ipad|ipod/.test(userAgent));
+      // Detecta se já está instalado (modo standalone)
+      setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+    }
+  }, []);
 
   const updateField = (field: keyof UserData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -33,7 +55,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   
   const canProceed = () => {
     switch(step) {
-      case 1: return !!formData.goal && !!formData.weight && !!formData.height;
+      case 1: return !!formData.gender && !!formData.goal && !!formData.weight && !!formData.height;
       case 2: return !!formData.experience;
       case 3: return (formData.days?.length || 0) > 0 && !!formData.location;
       case 4: return (formData.targetMuscles?.length || 0) > 0 && !!formData.focusMuscle;
@@ -47,32 +69,84 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     }
   };
 
-  const handleShare = async () => {
-    const url = window.location.href;
+  const handleNativeShare = async () => {
+    // Check if we are in a blob environment (preview mode)
+    if (window.location.protocol === 'blob:') {
+      // Fallback for preview mode
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'SmartFit Planner',
+            text: 'Estou usando este app de treino com IA! (Link indisponível no modo preview)',
+          });
+        } catch (err) { console.error(err); }
+      } else {
+        alert("Modo Preview: O compartilhamento de link está desativado.");
+      }
+      return;
+    }
+
     const shareData = {
       title: 'SmartFit Planner',
       text: 'Olha esse app de treino que eu configurei pra você!',
-      url: url,
+      url: currentUrl,
     };
 
     try {
       if (navigator.share) {
         await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(url);
-        alert('Link copiado! Agora é só colar no WhatsApp dela.');
       }
     } catch (err) {
       console.error('Erro ao compartilhar:', err);
     }
   };
 
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(currentUrl);
+    alert('Link copiado!');
+  };
+
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
+  };
+
+  // Se já estiver instalado, não mostra botões de instalação
+  const showInstallButton = !isStandalone && installPrompt;
+  const showManualInstallHelp = !isStandalone && !installPrompt;
+
   return (
     <div className="min-h-screen flex flex-col bg-white relative">
-      {/* Share Button (Top Right) */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* Header Actions (Top Right) */}
+      <div className="absolute top-4 right-4 z-10 flex gap-2">
+        {/* Botão Mágico (Android/Chrome) */}
+        {showInstallButton && (
+          <button
+            onClick={handleInstall}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-sm text-xs font-bold animate-pulse"
+            title="Instalar Aplicativo"
+          >
+            <Download className="w-4 h-4" />
+            Instalar
+          </button>
+        )}
+
+        {/* Botão de Ajuda (iOS/Outros) */}
+        {showManualInstallHelp && (
+          <button
+            onClick={() => setShowInstallHelp(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors shadow-sm text-xs font-bold"
+            title="Como Instalar"
+          >
+            <Smartphone className="w-4 h-4" />
+            Instalar?
+          </button>
+        )}
+        
         <button
-          onClick={handleShare}
+          onClick={() => setShowShareModal(true)}
           className="p-2 text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 transition-colors shadow-sm"
           title="Compartilhar Link do App"
         >
@@ -80,15 +154,116 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         </button>
       </div>
 
+      {/* Manual Install Help Modal */}
+      {showInstallHelp && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
+            <button 
+              onClick={() => setShowInstallHelp(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Como Instalar o App</h3>
+            
+            {isIOS ? (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="bg-gray-100 p-2 rounded-lg">1</div>
+                  <p className="text-sm text-gray-600">Toque no botão <strong>Compartilhar</strong> <span className="text-xl">⎋</span> na barra inferior do Safari.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="bg-gray-100 p-2 rounded-lg">2</div>
+                  <p className="text-sm text-gray-600">Role para baixo e selecione <strong>"Adicionar à Tela de Início"</strong> <span className="text-xl">➕</span>.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="bg-gray-100 p-2 rounded-lg">3</div>
+                  <p className="text-sm text-gray-600">Toque em <strong>Adicionar</strong> no canto superior direito.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                   <div className="bg-gray-100 p-2 rounded-lg">1</div>
+                   <p className="text-sm text-gray-600">Toque nos <strong>três pontinhos</strong> (menu) do navegador.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                   <div className="bg-gray-100 p-2 rounded-lg">2</div>
+                   <p className="text-sm text-gray-600">Selecione <strong>"Instalar aplicativo"</strong> ou "Adicionar à tela inicial".</p>
+                </div>
+              </div>
+            )}
+            
+            <button 
+              onClick={() => setShowInstallHelp(false)}
+              className="w-full mt-6 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
+            <button 
+              onClick={() => setShowShareModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Enviar App</h3>
+            {window.location.protocol === 'blob:' ? (
+              <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                 <strong>Modo Preview:</strong> O link gerado aqui é temporário e não funcionará para outras pessoas.
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 mb-6">Copie o link abaixo e mande no WhatsApp:</p>
+            )}
+            
+            <div className="flex gap-2 mb-4">
+              <input 
+                type="text" 
+                readOnly 
+                value={currentUrl}
+                className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none focus:ring-2 focus:ring-blue-500"
+                onClick={(e) => e.currentTarget.select()}
+              />
+              <button 
+                onClick={copyToClipboard}
+                className="p-2.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                title="Copiar Link"
+              >
+                <Copy className="w-5 h-5" />
+              </button>
+            </div>
+
+            {typeof navigator !== 'undefined' && navigator.share && (
+              <button 
+                onClick={handleNativeShare}
+                className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors"
+              >
+                <Share2 className="w-5 h-5" />
+                Compartilhar Direto
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Progress Bar */}
-      <div className="w-full h-2 bg-gray-100 mt-12 sm:mt-0">
+      <div className="w-full h-2 bg-gray-100 mt-16 sm:mt-0">
         <div 
           className="h-full bg-blue-600 transition-all duration-500 ease-out" 
           style={{ width: `${(step / 4) * 100}%` }}
         />
       </div>
 
-      <div className="flex-grow flex flex-col max-w-lg mx-auto w-full p-6 justify-center">
+      <div className="flex-grow flex flex-col max-w-lg mx-auto w-full p-6 justify-center pb-32">
         
         {/* Step 1: Basics */}
         {step === 1 && (
@@ -99,6 +274,26 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               </div>
               <h2 className="text-2xl font-bold text-gray-900">Vamos conhecer você</h2>
               <p className="text-gray-500">Primeiros passos para sua nova rotina.</p>
+            </div>
+
+            {/* Gender Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Gênero</label>
+              <div className="flex gap-4">
+                {['Masculino', 'Feminino'].map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => updateField('gender', g)}
+                    className={`flex-1 py-3 px-4 rounded-xl border transition-all text-sm font-medium ${
+                      formData.gender === g
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -235,7 +430,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 onChange={(e) => updateField('location', e.target.value)}
                 className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none bg-white"
               >
-                <option value="" disabled>Selecione o Local</option>
                 {Object.values(Location).map(loc => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
@@ -303,8 +497,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       </div>
 
       {/* Navigation Footer */}
-      <div className="p-6 border-t border-gray-100 bg-white">
-        <div className="flex gap-4">
+      <div className="fixed bottom-0 left-0 right-0 p-6 border-t border-gray-100 bg-white z-20">
+        <div className="max-w-lg mx-auto flex gap-4">
           {step > 1 && (
             <button 
               onClick={handleBack}
