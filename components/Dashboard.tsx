@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { WorkoutPlan, DayPlan, UserData, Exercise } from '../types';
 import ExerciseCard from './ExerciseCard';
-import { ChevronDown, ChevronUp, Dumbbell, Calendar, Clock, RotateCcw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Dumbbell, Calendar, Clock, RotateCcw, FileText, Download } from 'lucide-react';
+import { jsPDF } from "jspdf";
 
 interface DashboardProps {
   plan: WorkoutPlan;
@@ -12,6 +13,7 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ plan: initialPlan, userData, onReset }) => {
   const [plan, setPlan] = useState<WorkoutPlan>(initialPlan);
   const [expandedDay, setExpandedDay] = useState<string | null>(initialPlan[0]?.day || null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const toggleDay = (day: string) => {
     setExpandedDay(expandedDay === day ? null : day);
@@ -28,24 +30,156 @@ const Dashboard: React.FC<DashboardProps> = ({ plan: initialPlan, userData, onRe
     setPlan(newPlan);
   };
 
+  const generatePDF = () => {
+    setIsGeneratingPdf(true);
+    const doc = new jsPDF();
+    
+    // Configurações iniciais
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    let yPos = 20;
+
+    // Header
+    doc.setFillColor(37, 99, 235); // Blue-600
+    doc.rect(0, 0, pageWidth, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("SmartFit Planner", margin, 25);
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Seu plano de treino personalizado", margin, 32);
+
+    yPos = 55;
+
+    // Resumo do Perfil
+    doc.setTextColor(50, 50, 50);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("RESUMO DO PERFIL:", margin, yPos);
+    
+    yPos += 7;
+    doc.setFont("helvetica", "normal");
+    doc.text(`Objetivo: ${userData.goal}`, margin, yPos);
+    doc.text(`Foco: ${userData.focusMuscle}`, margin + 80, yPos);
+    yPos += 6;
+    doc.text(`Local: ${userData.location}`, margin, yPos);
+    doc.text(`Duração: ${userData.duration} min`, margin + 80, yPos);
+
+    yPos += 15;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, yPos, pageWidth - margin, yPos);
+    yPos += 10;
+
+    // Loop dos Dias
+    plan.forEach((dayPlan) => {
+      // Verifica quebra de página
+      if (yPos > 250) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      // Cabeçalho do Dia
+      doc.setFillColor(240, 245, 255); // Light Blue bg
+      doc.roundedRect(margin, yPos, pageWidth - (margin * 2), 14, 2, 2, 'F');
+      
+      doc.setTextColor(37, 99, 235);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${dayPlan.day} - ${dayPlan.focus}`, margin + 5, yPos + 9);
+      
+      yPos += 20;
+
+      // Lista de Exercícios
+      dayPlan.exercises.forEach((ex) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(ex.name, margin, yPos);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.setFont("helvetica", "normal");
+        const details = `${ex.sets} séries  x  ${ex.reps} reps`;
+        const widthDetails = doc.getTextWidth(details);
+        
+        // Alinhar à direita
+        doc.text(details, pageWidth - margin - widthDetails, yPos);
+        
+        yPos += 5;
+        
+        // Notas (Músculo e Dica)
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.setFont("helvetica", "italic");
+        const noteText = `(${ex.muscle}) ${ex.notes}`;
+        
+        // Quebrar texto longo de notas se necessário
+        const splitNotes = doc.splitTextToSize(noteText, pageWidth - (margin * 2));
+        doc.text(splitNotes, margin, yPos);
+        
+        yPos += (splitNotes.length * 4) + 6; // Espaço entre exercícios
+      });
+
+      yPos += 5; // Espaço entre dias
+    });
+
+    // Rodapé
+    const pageCount = doc.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Gerado por SmartFit AI - Página ${i} de ${pageCount}`, pageWidth / 2, 290, { align: 'center' });
+    }
+
+    doc.save("SmartFit-Treino.pdf");
+    setIsGeneratingPdf(false);
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 pb-20">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Seu Plano Smart</h1>
             <p className="text-gray-500 mt-2">
               Foco: <span className="font-medium text-blue-600">{userData.focusMuscle}</span>
             </p>
           </div>
-          <button 
-            onClick={onReset}
-            className="flex items-center gap-2 text-sm text-gray-500 hover:text-red-600 transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reiniciar
-          </button>
+          
+          <div className="flex gap-2">
+            <button 
+              onClick={generatePDF}
+              disabled={isGeneratingPdf}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors shadow-sm text-sm font-medium"
+            >
+              {isGeneratingPdf ? (
+                <span>Gerando...</span>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4" />
+                  Baixar PDF
+                </>
+              )}
+            </button>
+            
+            <button 
+              onClick={onReset}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reiniciar
+            </button>
+          </div>
         </div>
         
         {/* Quick Stats */}
