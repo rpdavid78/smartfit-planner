@@ -43,17 +43,18 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, location, onSwap 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-4 transition-all hover:shadow-md">
       <div className="flex flex-col sm:flex-row">
-        {/* Visual Demonstration Placeholder */}
-        <div className="w-full sm:w-32 h-32 bg-gray-100 flex-shrink-0 relative group">
-          <img 
-            src={`https://picsum.photos/300/300?random=${Math.random()}`} 
-            alt={exercise.name}
-            className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
-          />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/10">
-            <PlayCircle className="text-white w-8 h-8 opacity-80" />
+         {/* Visual Demonstration Placeholder */}
+        <a 
+          href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise tutorial' )}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full sm:w-32 h-32 bg-gradient-to-br from-blue-500 to-blue-600 flex-shrink-0 relative group block"
+        >
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-2">
+            <PlayCircle className="w-10 h-10 mb-1 opacity-90 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-semibold text-center leading-tight">Ver Tutorial</span>
           </div>
-        </div>
+        </a>
 
         {/* Content */}
         <div className="p-4 flex-grow flex flex-col justify-between">
